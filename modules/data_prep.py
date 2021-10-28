@@ -12,6 +12,10 @@ import enum
 import pandas as pd
 from datetime import datetime
 
+import locale
+
+locale.setlocale(locale.LC_NUMERIC, "")
+
 token = os.getenv("GITHUB_TOKEN", "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")
 g = Github(token)
 repo = g.get_repo("minhealthnz/nz-covid-data")
@@ -65,6 +69,17 @@ def generate_repository_info(repo):
     )
 
 
+def is_string_series(s: pd.Series):
+    if isinstance(s.dtype, pd.StringDtype):
+        # The series was explicitly created as a string series (Pandas>=1.0.0)
+        return True
+    elif s.dtype == "object":
+        # Object series, check each value
+        return all((v is None) or isinstance(v, str) for v in s)
+    else:
+        return False
+
+
 class MOH_data:
     def prep_step1_pull_data(self):
 
@@ -107,11 +122,26 @@ class MOH_data:
 
         # Get the current week and prior weeks data
         self.df_week_prior = pd.read_csv(
-            self.weekly_data_folders[date_week_current] / data_files_oi[0]
-        )
-        self.df_week_current = pd.read_csv(
             self.weekly_data_folders[date_week_prior] / data_files_oi[0]
         )
+        self.df_week_current = pd.read_csv(
+            self.weekly_data_folders[date_week_current] / data_files_oi[0]
+        )
+
+        # clean series, convert any str to int
+        series_to_check = [
+            "Population",
+            "First dose administered",
+            "Second dose administered",
+        ]
+
+        def convert_series_atoi(df: pd.DataFrame, series_to_check):
+            for serie in series_to_check:
+                if is_string_series(df[serie]):
+                    df[serie] = df[serie].apply(locale.atoi)
+
+        convert_series_atoi(self.df_week_prior, series_to_check)
+        convert_series_atoi(self.df_week_current, series_to_check)
 
         # Filter for Northland
         self.df_week_current = self.df_week_current.loc[
@@ -162,7 +192,7 @@ class MOH_data:
             validate="one_to_one",
             suffixes=("", "_prior"),
         )
-        self.df_compare.loc[:, self.df_uptake_keys + ["Population", "Population_prior"]]
+        # self.df_compare.loc[:, self.df_uptake_keys + ["Population", "Population_prior"]]
 
         self.df_compare["Week ending"] = datetime.fromisoformat(date_week_current)
 
@@ -193,30 +223,9 @@ class MOH_data:
         ]
         self.df_compare[change_fields] = self.df_compare.apply(calc_changes, axis=1)
 
-    def prep_step_3_generate_output_data(self):
-        # Create the Output Dataframe
-        output_fields = [
-            "Week ending",
-            "Population",
-            "Population_prior",
-            "Population Changed",
-            "First dose administered",
-            "First dose administered_prior",
-            "First dose administered Changed",
-            "Second dose administered",
-            "Second dose administered_prior",
-            "Second dose administered Changed",
-        ]
-        self.df_out = (
-            self.df_compare.loc[:, self.df_uptake_keys + output_fields]
-            .groupby(["DHB of residence", "Ethnic group", "Gender", "Age group"])
-            .sum()
-        )
-
-        self.df_out.reset_index(inplace=True)
-
-        # Calculate the unvaccinated and ratio of first dose to unvaccinated
-        self.df_out["Population unvaccinated"] = 0
+        # Calculate Population Unvaccinated
+        # 1. Create the Population unvaccinated  fields
+        self.df_compare["Population unvaccinated"] = 0
 
         def calc_percentage_of_unvaccinated_population(record):
             # print(type(record["Population"]))
@@ -253,12 +262,68 @@ class MOH_data:
                 )
             # print((unvaccinated_population, result))
             # assert False
-            return pd.Series((unvaccinated_population, result))
+            return pd.Series(
+                (
+                    unvaccinated_population,
+                    unvaccinated_population - record["First dose administered Changed"],
+                    result,
+                )
+            )
 
-        changed_fields = [
+        change_fields = [
             "Population unvaccinated",
+            "Population unvaccinated at week end",
             "First dose administered Changed as Percent of unvaccinated Population",
         ]
-        self.df_out[changed_fields] = self.df_out.apply(
+        self.df_compare[change_fields] = self.df_compare.apply(
             calc_percentage_of_unvaccinated_population, axis=1
         )
+        self.output_fields = [
+            "Week ending",
+            "Population",
+            "Population_prior",
+            "Population Changed",
+            "Population unvaccinated",
+            "Population unvaccinated at week end",
+            "First dose administered",
+            "First dose administered_prior",
+            "First dose administered Changed",
+            "First dose administered Changed as Percent of unvaccinated Population",
+            "Second dose administered",
+            "Second dose administered_prior",
+            "Second dose administered Changed",
+        ]
+
+    def prep_step_3_generate_output_data(self):
+        # Create the Output Dataframe
+        output_fields = [
+            "Week ending",
+            "Population",
+            "Population_prior",
+            "Population Changed",
+            "Population unvaccinated",
+            "First dose administered",
+            "First dose administered_prior",
+            "First dose administered Changed",
+            "First dose administered Changed as Percent of unvaccinated Population",
+            "Second dose administered",
+            "Second dose administered_prior",
+            "Second dose administered Changed",
+        ]
+        self.df_out = (
+            self.df_compare.loc[:, self.df_uptake_keys + output_fields]
+            .groupby(
+                [
+                    "DHB of residence",
+                    "Week ending",
+                    "Ethnic group",
+                    "Gender",
+                    "Age group",
+                ]
+            )
+            .sum()
+        )
+
+        self.df_out.reset_index(inplace=True)
+
+        # Calculate the unvaccinated and ratio of first dose to unvaccinated
