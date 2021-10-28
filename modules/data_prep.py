@@ -11,6 +11,7 @@ from git import Repo
 import enum
 import pandas as pd
 from datetime import datetime
+from typing import List
 
 import locale
 
@@ -115,7 +116,7 @@ class MOH_data:
             if re.match(r"\d{4}-\d{2}-\d{2}", i)
         }
 
-    def prep_step_2_read_uptake_data(
+    def _prep_step_2_read_a_week_uptake_data(
         self, date_week_current=DATE_WEEK_CURRENT, date_week_prior=DATE_WEEK_PRIOR
     ):
         data_files_oi = ["dhb_residence_uptake.csv"]
@@ -225,7 +226,7 @@ class MOH_data:
 
         # Calculate Population Unvaccinated
         # 1. Create the Population unvaccinated  fields
-        self.df_compare["Population unvaccinated"] = 0
+        self.df_compare["Population unvaccinated at week start"] = 0
 
         def calc_percentage_of_unvaccinated_population(record):
             # print(type(record["Population"]))
@@ -246,6 +247,7 @@ class MOH_data:
                 else record["First dose administered Changed"]
             )
             try:
+                # TODO: reduce the division by zero errors
                 result = round(
                     # Calculate percentage
                     (
@@ -271,7 +273,7 @@ class MOH_data:
             )
 
         change_fields = [
-            "Population unvaccinated",
+            "Population unvaccinated at week start",
             "Population unvaccinated at week end",
             "First dose administered Changed as Percent of unvaccinated Population",
         ]
@@ -283,7 +285,7 @@ class MOH_data:
             "Population",
             "Population_prior",
             "Population Changed",
-            "Population unvaccinated",
+            "Population unvaccinated at week start",
             "Population unvaccinated at week end",
             "First dose administered",
             "First dose administered_prior",
@@ -294,14 +296,140 @@ class MOH_data:
             "Second dose administered Changed",
         ]
 
-    def prep_step_3_generate_output_data(self):
+    def prep_step_2_read_all_uptake_data(self):
+        """Read in all available data and format appropriately"""
+        # Generate a list of Weeks available to process
+        list_of_weeks = [week for week in sorted(self.weekly_data_folders.keys())]
+        # Construct a paramater set
+        comparison_sets = list(zip(list_of_weeks[1:], list_of_weeks[2:]))
+        comparsion_sets_args = [
+            {"date_week_current": t[1], "date_week_prior": t[0]}
+            for t in comparison_sets
+        ]
+
+        self.df_all_weeks = None
+        for cs in comparsion_sets_args:
+            self._prep_step_2_read_a_week_uptake_data(**cs)
+            if self.df_all_weeks is None:
+                self.df_all_weeks = self.df_compare.loc[
+                    :, self.df_uptake_keys + self.output_fields
+                ].copy(deep=True)
+            else:
+                self.df_all_weeks = pd.concat(
+                    [
+                        self.df_all_weeks,
+                        self.df_compare.loc[
+                            :, self.df_uptake_keys + self.output_fields
+                        ],
+                    ],
+                    axis=0,
+                    ignore_index=True,
+                )
+
+    def prep_step_3_generate_report_data(self):
+        """Generate Data Sets for Reporting against"""
+
+        # Generate a grouped `Age Group` called `Age Category`
+        age_group_sets = [
+            [
+                "12-15",
+                "16-19",
+            ],
+            [
+                "20-24",
+                "25-29",
+                "30-34",
+                "35-39",
+            ],
+            [
+                "40-44",
+                "45-49",
+                "50-54",
+                "55-59",
+                "60-64",
+                "65-69",
+            ],
+            ["70-74", "75-79", "80-84", "85-89", "90+"],
+        ]
+
+        def minmax(l: List[int]) -> List[int]:
+            return [min(l), max(l)]
+
+        age_category = {
+            i: "-".join(minmax("-".join(l).split("-")))
+            for i, l in enumerate(age_group_sets)
+        }
+        age_category_lookup = {
+            a: age_category[i] for i, l in enumerate(age_group_sets) for a in l
+        }
+        age_category_lookup_lookup_reverse = {
+            v: k for k, v in age_category_lookup.items()
+        }
+        self.df_all_weeks["Age Category"] = self.df_all_weeks["Age group"].apply(
+            age_category_lookup.get
+        )
+
+        self.df_all_weeks_no_gender_age_category = (
+            self.df_all_weeks.loc[
+                :,
+            ]
+            .groupby(
+                by=[
+                    "DHB of residence",
+                    "Week ending",
+                    "Ethnic group",
+                    # "Gender",
+                    "Age Category",
+                ]
+            )
+            .sum()
+        )
+
+        self.df_all_weeks_no_gender_age_category.reset_index(inplace=True)
+
+        self.df_all_weeks_no_gender = (
+            self.df_all_weeks.loc[
+                :,
+            ]
+            .groupby(
+                by=[
+                    "DHB of residence",
+                    "Week ending",
+                    "Ethnic group",
+                    # "Gender",
+                    "Age Category",
+                ]
+            )
+            .sum()
+        )
+
+        self.df_all_weeks_no_gender.reset_index(inplace=True)
+
+        self.df_all_weeks_no_gender_no_age = (
+            self.df_all_weeks.loc[
+                :,
+            ]
+            .groupby(
+                by=[
+                    "DHB of residence",
+                    "Week ending",
+                    "Ethnic group",
+                    # "Gender",
+                    # "Age group",
+                ]
+            )
+            .sum()
+        )
+
+        self.df_all_weeks_no_gender_no_age.reset_index(inplace=True)
+
         # Create the Output Dataframe
         output_fields = [
             "Week ending",
             "Population",
             "Population_prior",
             "Population Changed",
-            "Population unvaccinated",
+            "Population unvaccinated at week start",
             "First dose administered",
             "First dose administered_prior",
             "First dose administered Changed",
