@@ -7,6 +7,9 @@
 from datetime import datetime
 import os
 import pandas as pd
+from math import log10,trunc,ceil
+import inflect
+inflector = inflect.engine()
 # %%
 
 
@@ -216,7 +219,15 @@ df = data.df_all_weeks_no_gender_age_category.query((
     '["European or Other", "Maori"] in `Ethnic group`'
     ' and `Age Category` == "12-19"'
     )
-)
+).sort_values(["Age Category", "Ethnic group"])
+# %%
+df = data.df_all_weeks_no_gender_age_category.query((
+    '["European or Other", "Maori"] in `Ethnic group`'
+    # ' and `Age Category` == "12-19"'
+        # ' and ["12-19","20-39"] in `Age Category`'
+
+    )
+).sort_values(["Age Category", "Ethnic group"])
 
 # %%
 import plotly.graph_objects as go
@@ -226,11 +237,7 @@ x=df['Week ending'].unique()
 # %%
 fig = None
 fig = go.Figure()
-
-ethnic_group="Maori"
-age_category="12-19"
-y_offset=0
-set_stack_group="one"
+fig.update_layout(autosize=True)
 
 def fig_section(fig,ethnic_group,age_category,y_offset=0,section='',
     colors=['#FD3216','#00FE35','#6A76FC']):
@@ -238,228 +245,161 @@ def fig_section(fig,ethnic_group,age_category,y_offset=0,section='',
 
 
     def fig_section_trace(
-        fig,df,ethnic_group,age_category,field='',y_offset=0,y_multiplier=1,section='',
+        fig,df,ethnic_group,age_category,field='',status_text='',y_offset=0,y_multiplier=1,section='',
         color=None,showlegend=True,**kwargs):
 
         if showlegend:
             kwargs = {**kwargs, 
                       **dict(
                        legendgroup=section,
-                        legendgrouptitle=dict(
-                                text=f"{ethnic_group}"
+                       legendgrouptitle=dict(
+                                text=f"{ethnic_group}{age_category}"
                         ),
                       )
             }
-        print(f"kwargs: {kwargs}")
+        # print(f"kwargs: {kwargs}")
         fig.add_trace(go.Scatter(
-            name=f"{age_category} - {vac_status}",
+            name=f"{age_category} - {status_text}",
             x=x, 
-            y=y_offset+df.query(f'["{ethnic_group}"] in `Ethnic group`'
+            y=y_offset+df.query((
+                f'["{ethnic_group}"] in `Ethnic group`'
+                f'and ["{age_category}"] in `Age Category`'
+                )
                 )[field].astype('Int64')*y_multiplier,
             
             mode='lines',
             line=dict(width=0.5, 
                         color=color
-                        # color='rgb(184, 247, 212)'
             ),
             showlegend=showlegend,
             # fillcolor=colors[0],
-            # linecolor=colors[0],
             hoveron = 'points+fills', # select where hover is active
-            text=f"{ethnic_group}<br>{age_category} - {vac_status}",
+            text=f"{ethnic_group}<br>{age_category} - {status_text}",
             hoverinfo = 'text',
 
-            marker = dict(
-                autocolorscale=False,
-                cauto=False,
-                color=colors[0]
-                        ),
+            # marker = dict(
+            #     autocolorscale=False,
+            #     cauto=False,
+            #     color=colors[0]
+            #             ),
             stackgroup=section,
-            # groupnorm='' # sets the normalization for the sum of the stackgroup
             **kwargs
         ))
 
-
+    config= dict(
+        fig=fig,
+        df=df,
+        ethnic_group=ethnic_group,
+        age_category=age_category,
+        section=section,
+        y_offset=0,
+        y_multiplier=1,
+        )
     if y_offset>0:
         fig_section_trace(
-                    fig,
-                    df,
-                    field='Population unvaccinated at week end',
-                    ethnic_group=ethnic_group,
-                    age_category=age_category,
-                    y_offset=y_offset,
-                    y_multiplier=0,
+                    **(config | 
+                        dict(
+                            field='Population unvaccinated at week end',
+                            y_offset=y_offset,
+                            y_multiplier=0,
+                            color=colors[0], 
+                            showlegend=False,
+                            fill='none',  
+                            groupnorm=''                         
+                        )
+                    )
+
+)
+    trace_configs= [dict(
+                            status_text="No Doses",
+                            field='Population unvaccinated at week end',
+                            color=colors[0], 
+                            # - extra trace config
+                            groupnorm='',
+
+                            ),
+                    dict(
+                            status_text="First Dose",
+                            field='First dose administered',
+                            color=colors[1], 
+                            # - extra trace config
+
+                            ),
+                    dict(
+                            status_text="Second Dose",
+                            field='Second dose administered',
+                            y_multiplier=-1,
+                            color=colors[2], 
+                            # - extra trace config
+                            )
+                            ]
+    for trace_config in trace_configs:
+        fig_section_trace(**(config | trace_config))
+
+    
+
+ethnic_groups = df['Ethnic group'].unique()
+age_categories = df['Age Category'].unique()
+# age_categories = ["12-19"]
+last_section_y_max=0
+section_id=1
+for i,age_category in enumerate(age_categories):
+    for j,ethnic_group in enumerate(ethnic_groups):
+        population=df.query((
+                    f'["{ethnic_group}"] in `Ethnic group`'
+                    f'and `Age Category` == "{age_category}"'
+        ))['Population'].max()
+        section = inflector.number_to_words(f'{section_id}')
+        print(f"Debug: {last_section_y_max}, {section}, {age_category}, {ethnic_group}, {population}")
+        fig_section(fig,ethnic_group=ethnic_group,age_category=age_category,
+                    y_offset=last_section_y_max,
                     section=section,
-                    color=colors[0], 
-                    showlegend=False,
-                    fill='none')
-        # fig.add_trace(go.Scatter(
-        #         name=f"{age_category} - {vac_status}",
-        #         x=x, y=y_offset+df.query(f'["{ethnic_group}"] in `Ethnic group`'
-        #             )['Population unvaccinated at week end'].astype('Int64')*0,
-        #         fill='none',
-        #         mode='lines',
-        #         line=dict(width=0.5, 
-        #                     color=colors[0]
-        #                     # color='rgb(184, 247, 212)'
-        #         ),
-        #         showlegend=False,
-        #         # legendgroup=section,
-        #         # legendgrouptitle=dict(
-        #         #     text=f"{ethnic_group}"
-
-        #         # ),
-        #         # fillcolor=colors[0],
-        #         # linecolor=colors[0],
-        #         hoveron = 'points+fills', # select where hover is active
-        #         text=f"{ethnic_group}<br>{age_category} - {vac_status}",
-        #         hoverinfo = 'text',
-
-        #         marker = dict(
-        #             autocolorscale=False,
-        #             cauto=False,
-        #             color=colors[0]
-        #                     ),
-        #         stackgroup=section,
-        #         # groupnorm='' # sets the normalization for the sum of the stackgroup
-        #     ))
-    fig_section_trace(
-                fig,
-                df,
-                field='Population unvaccinated at week end',
-                ethnic_group=ethnic_group,
-                age_category=age_category,
-                y_offset=0,
-                y_multiplier=1,
-                section=section,
-                color=colors[0], 
-                # - extra trace config
-                groupnorm=''
-    )
-    # fig.add_trace(go.Scatter(
-    #     name=f"{age_category} - {vac_status}",
-    #     x=x, y=df.query(f'["{ethnic_group}"] in `Ethnic group`'
-    #         )['Population unvaccinated at week end'].astype('Int64'),
-    #     mode='lines',
-    #     line=dict(width=0.5, 
-    #                 color=colors[0]
-    #                 # color='rgb(184, 247, 212)'
-    #     ),
-    #     legendgroup=section,
-    #     legendgrouptitle=dict(
-    #         text=f"{ethnic_group}"
-
-    #     ),
-    #     # fillcolor=colors[0],
-    #     # linecolor=colors[0],
-    #     hoveron = 'points+fills', # select where hover is active
-    #     text=f"{ethnic_group}<br>{age_category} - {vac_status}",
-    #     hoverinfo = 'text',
-    #     marker = dict(
-    #         autocolorscale=False,
-    #         cauto=False,
-    #         color=colors[0]
-    #                 ),
-    #     stackgroup=section,
-    #     groupnorm='' # sets the normalization for the sum of the stackgroup
-    # ))
-
-    vac_status="First Dose"
-    fig_section_trace(
-                fig,
-                df,
-                field='First dose administered',
-                ethnic_group=ethnic_group,
-                age_category=age_category,
-                y_offset=0,
-                y_multiplier=1,
-                section=section,
-                color=colors[1], 
-                # - extra trace config
-    )
-
-    # fig.add_trace(go.Scatter(
-    #     name=f"{age_category} - {vac_status}",
-    #     x=x, y=df.query(f'["{ethnic_group}"] in `Ethnic group`'
-    #             )['First dose administered'].astype('Int64'),
-    #     mode='lines',
-    #     line=dict(width=0.5, 
-    #                 color=colors[1]
-    #                 # color='rgb(111, 231, 219)'
-    #     ),
-    #     # fillcolor=colors[1],
-    #     # linecolor=colors[1],
-    #     hoveron = 'points+fills', # select where hover is active
-    #     text=f"{ethnic_group}<br>{age_category} - {vac_status}",
-    #     hoverinfo = 'text',
-    #     stackgroup=section,
-    #     marker = dict(
-    #         autocolorscale=False,
-    #         cauto=False,
-    #         color=colors[1]
-    #         ),
-
-    # ))
-    vac_status="Second Dose"
-    fig_section_trace(
-                fig,
-                df,
-                field='Second dose administered',
-                ethnic_group=ethnic_group,
-                age_category=age_category,
-                y_offset=0,
-                y_multiplier=-1,
-                section=section,
-                color=colors[2], 
-                # - extra trace config
-                fill="tonexty",
-    )
-    # fig.add_trace(go.Scatter(
-    #     name=f"{age_category} - {vac_status}",
-    #     x=x, y=-df.query(f'["{ethnic_group}"] in `Ethnic group`'
-    #             )['Second dose administered'].astype('Int64'),
-    #     mode='lines',
-    #     fill="tonexty",
-    #     line=dict(width=0.5, 
-    #                 color=colors[2]
-    #                 # color='rgb(127, 166, 238)'
-    #     ),
-    #     # fillcolor=colors[2],
-    #     # linecolor=colors[2],
-    #     hoveron = 'points+fills', # select where hover is active
-    #     text=f"{ethnic_group}<br>{age_category} - {vac_status}",
-    #     hoverinfo = 'text',
-    #     marker = dict(
-    #         autocolorscale=False,
-    #         cauto=False,
-    #         color=colors[2]
-    #     ),
-
-    #     stackgroup=section
-    # ))
-
-fig_section(fig,ethnic_group="Maori",age_category="12-19",
-            y_offset=0,section='one',
-            colors=['#AD3216','#F0FE35','#3A76FC'],
+                    # colors=['#AD3216','#F0FE35','#3A76FC'],
+                    colors=['Red','Yellow','Green']
+                    )
+        fig.add_annotation(x=str(x[0]), y=last_section_y_max,
+            # xref='paper',
+            xanchor='left',
+            text=f"{ethnic_group} - {age_category}",
+            showarrow=False,
+            xref="x",
+            yref="y",
+            # arrowhead=1,
+            # # If axref is exactly the same as xref, then the text's position is
+            # # absolute and specified in the same coordinates as xref.
+            # axref="x",
+            # # The same is the case for yref and ayref, but here the coordinates are data
+            # # coordinates
+            # ayref="y",
+            yshift=+10,
+            xshift=100,
+            align="left"
             )
-fig_section(fig,ethnic_group="European or Other",age_category="12-19",
-            y_offset=9714,
-            # y_offset=df.query('["Maori"] in `Ethnic group`'
-            # )['Population'].max(),
-            section='two',
-            colors=['#FD3246','#00FE75','#6A762C'],
-            )
+        last_section_y_max=last_section_y_max+population
+        section_id += 1
 
+
+def xaxis_ceiling(val):
+    ceiling_limiter=trunc(log10(last_section_y_max))-1
+    return ceil(last_section_y_max/10**ceiling_limiter)*10**ceiling_limiter
 
 fig.update_layout(
+    title = 'Vaccination Status',
+    height=1000,
     showlegend=True,
-    xaxis=dict(
-        autorange=True,
-        type='date',
+    # xaxis=dict(
+    #     autorange=True,
+    #     type='date',
+    # )
+    xaxis = dict(
+        tickmode = 'array',
+        tickvals = x,
+        ticktext = [pd.Timestamp(e).to_pydatetime().strftime('%b %d<br>(%a)') for e in x]
     ),
+    # xaxis_tickformat = '%d %B (%a)<br>%Y',
     yaxis=dict(
         type='linear',
-        range=[0, 40000],
+        range=[0, xaxis_ceiling(last_section_y_max)],
         ticksuffix=''))
 
 fig
@@ -479,11 +419,13 @@ fig.update_layout(
     ),
     yaxis=dict(
         type='linear',
-        range=[0, 40000],
+        range=[0, 200000],
         ticksuffix=''))
 
 fig
 
+
+# %%
 
 # %%
 fig = px.area(data.df_all_weeks_no_gender_age_category.loc[:], 
