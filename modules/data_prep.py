@@ -248,7 +248,7 @@ class MOH_data:
             )
             try:
                 # TODO: reduce the division by zero errors
-                result = round(
+                result = 0 if unvaccinated_population==0 else round(
                     # Calculate percentage
                     (
                         record["First dose administered Changed"]
