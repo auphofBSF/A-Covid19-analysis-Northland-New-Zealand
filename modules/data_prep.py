@@ -1,8 +1,19 @@
-from myst_nb import glue
+import logging
 
-DATE_WEEK_CURRENT = "2021-10-19"
-DATE_WEEK_PRIOR = "2021-10-26"
+log = logging.getLogger(__name__)
+if not logging.getLogger().hasHandlers():
+    # assume logging not active so use print114
+    log.error = log.info = log.warn = print
+
+from myst_nb import glue
+from dotenv import load_dotenv, find_dotenv
+
+load_dotenv(find_dotenv(".env"))
+
+
 DATA_MOH = "../data_moh_nz"
+GITHUB_REPO_MOH_COVID19 = "minhealthnz/nz-covid-data"
+
 from github import Github
 import os, re
 from pathlib import Path
@@ -17,9 +28,25 @@ import locale
 
 locale.setlocale(locale.LC_NUMERIC, "")
 
-token = os.getenv("GITHUB_TOKEN", "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")
+token = os.getenv("GITHUB_TOKEN", None)
+if not token:
+    log.error("NO Github Personal Access Token Defined:")
+    raise Exception(
+        (
+            f" a Valid `GITHUB_TOKEN` is required to access the repo:{GITHUB_REPO_MOH_COVID19}\n"
+            f"set this in an `.env` in the project root folder\n"
+            f"for further info on Githhub Personal Access Tokens (PAT's) see: "
+            f"https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token\n"
+        )
+    )
+else:
+    log.info(
+        f"Accessing github with Github Personal Access Token: {token[0:5]}.............{token[-5:]}"
+    )
+
+
 g = Github(token)
-repo = g.get_repo("minhealthnz/nz-covid-data")
+repo = g.get_repo(GITHUB_REPO_MOH_COVID19)
 
 
 class FetchInfoFlags(enum.IntFlag):
@@ -117,7 +144,7 @@ class MOH_data:
         }
 
     def _prep_step_2_read_a_week_uptake_data(
-        self, date_week_current=DATE_WEEK_CURRENT, date_week_prior=DATE_WEEK_PRIOR
+        self, date_week_current=None, date_week_prior=None
     ):
         data_files_oi = ["dhb_residence_uptake.csv"]
 
@@ -248,14 +275,18 @@ class MOH_data:
             )
             try:
                 # TODO: reduce the division by zero errors
-                result = 0 if unvaccinated_population==0 else round(
-                    # Calculate percentage
-                    (
-                        record["First dose administered Changed"]
-                        / unvaccinated_population
-                        * 100
-                    ),
-                    3,
+                result = (
+                    0
+                    if unvaccinated_population == 0
+                    else round(
+                        # Calculate percentage
+                        (
+                            record["First dose administered Changed"]
+                            / unvaccinated_population
+                            * 100
+                        ),
+                        3,
+                    )
                 )
             except Exception as e:
                 result = 0 if unvaccinated_population <= 0 else None
