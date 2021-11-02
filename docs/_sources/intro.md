@@ -1,9 +1,9 @@
-# Welcome to Northland Covid 19 Vacination progress Monitor
+# Welcome to Northland Covid 19 Vaccination progress Monitor
 
-This small data analysis book aims to visualize the data on how we are progressing in getting Northland vaccintate
+This small data analysis study aims to visualize the data on the progress of Northland vaccinations against Covid19
 
 :::{note}
-This is not an official analysis but an analysis based on MOH publically availabel
+This is not an official analysis but an analysis based on MOH data publicly available
 :::
 
 
