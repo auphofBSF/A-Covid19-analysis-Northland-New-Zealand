@@ -274,7 +274,6 @@ class MOH_data:
                 else record["First dose administered Changed"]
             )
             try:
-                # TODO: reduce the division by zero errors
                 result = (
                     0
                     if unvaccinated_population == 0
@@ -326,6 +325,51 @@ class MOH_data:
             "Second dose administered_prior",
             "Second dose administered Changed",
         ]
+
+        glue(
+            f"Northland Total Vaccine Eligible Unvaccinated Population (current week)",
+            self.df_compare["Population unvaccinated at week end"].sum(),
+            display=False,
+        )
+        glue(
+            f"Northland Total Vaccine New Vaccinated Population (current week)",
+            self.df_compare["First dose administered Changed"].sum(),
+            display=False,
+        )
+
+        value = round(
+            self.df_compare["First dose administered Changed"].sum()
+            / self.df_compare["Population unvaccinated at week start"].sum()
+            * 100,
+            2,
+        )
+        glue(
+            f"Northland Total New Vaccinated % of unvaccinated Population at start of week (current week)",
+            f"{value}%",
+            display=False,
+        )
+        value = round(
+            self.df_compare["First dose administered"].sum()
+            / self.df_compare["Population"].sum()
+            * 100,
+            2,
+        )
+        glue(
+            f"Northland partially and full Vaccinated Population as Percentage of Population at end of week (current week)",
+            f"{value}%",
+            display=False,
+        )
+        value = round(
+            self.df_compare["Second dose administered"].sum()
+            / self.df_compare["Population"].sum()
+            * 100,
+            2,
+        )
+        glue(
+            f"Northland Fully Vaccinated Population as percentage of Population at end of week (current week)",
+            f"{value}%",
+            display=False,
+        )
 
     def prep_step_2_read_all_uptake_data(self):
         """Read in all available data and format appropriately"""
