@@ -1,9 +1,10 @@
-# Welcome to Northland Covid 19 Vaccination progress Monitor
+# Intro
 
-This small data analysis study aims to visualize the data on the progress of Northland vaccinations against Covid19
+This small data analysis study aims to visualize the data on Covid-19 in Northland.
+the following parts explore vaccination, outbreaks and modelling of Covid-19 in Northland
 
 :::{note}
-This is not an official analysis but an analysis based on MOH data publicly available
+This is not an official analysis but an analysis based on data publicly available such as NZ Ministry of Health
 :::
 
 
