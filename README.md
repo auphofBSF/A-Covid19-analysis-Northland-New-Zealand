@@ -4,6 +4,8 @@ A personal study of the Covid19 situation in Northland New Zealand, by a concern
 
 This study is based on publicly available data sources
 
+The Github Pages published version of this can be found at https://auphofbsf.github.io/NZ-Covid19-Vaccine-Analysis-Northland 
+
 # Accessing Github Data sources
 Credentials are required,  obtain a Github PAT token to access the MOH Github Data
 set it in an .env in the root folder such as:
