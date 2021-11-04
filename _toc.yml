@@ -1,0 +1,13 @@
+# Table of contents
+# Learn more at https://jupyterbook.org/customize/toc.html
+
+format: jb-book
+root: intro
+parts:
+  - caption: Northland Covid19 2021 Vaccination Rollout Analysis
+    chapters:
+    - file: Northland2021Covid19VacinationRolloutAnalysis
+  - caption: Modeling against UK Covid19 Vaccination Surveillance data
+    chapters:
+        - file: Northland2021Covid19VacinationModelling
+

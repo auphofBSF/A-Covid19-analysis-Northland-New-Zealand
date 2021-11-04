@@ -1,10 +1,10 @@
 
-
-
+.ipynb_checkpoints
+sandbox
 _pycache_
 
 *.pyc
 
-
+.env*
 
 _build
