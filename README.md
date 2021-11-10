@@ -32,3 +32,17 @@ for complete rebuild
 ```
 jb build . --all
 ```
+
+# Publish latest book to Github Pages
+```pwsh
+
+# workaround for https://github.com/PowerShell/PowerShell/issues/8211  On Windows, Remove-Item fails intermittently with -Recurse and is unexpectedly asynchronous itself
+
+CMD /C RMDIR docs /S /Q 
+mkdir docs
+Copy-Item -Path _build\html\* -Destination docs –Recurse
+echo $null >> docs\.nojekyll
+git add docs\*.*
+git commit -m "feat: weekly MOH data release"
+git push origin
+```
